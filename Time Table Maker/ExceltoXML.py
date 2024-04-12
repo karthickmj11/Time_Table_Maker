@@ -1,0 +1,112 @@
+import numpy as np
+import openpyxl
+import xml.etree.ElementTree as ET
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+import numpy as np
+def XmlToExcel(path):
+    # load the XML file
+    print('XmlToExcel')
+    tree = ET.parse(path)
+    Excel_path = '/'.join(path.split('/')[:-1])+'/TimeTable.xlsx'
+    root = tree.getroot()
+
+    # create a new Excel workbook and worksheet
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    # write the header row
+    headers = ['ID Name', 'Version', 'TITLE', 'SCHEDULE NAME', 'COMMENT', 'SERVICE', 'TRIP NUMBER', 'TRIP_ID', 'SERVICE_ID', 'DIRECTION', 'ENTRY_TIME', 'DISTANCE', 'TRAIN_CLASS', 'MISSION_TYPE', 'RUNNING_MODE', 'CREW_ID', 'NEXT_CREW_ID', 'NEXT_CREW_ID_LOCATION', 'ROLLINGSTOCK_ID', 'PREVIOUS_NUMBER', 'NEXT_NUMBER', 'STOP TOP', 'DWELLTIME', 'SITUATION', 'RUN TOP', 'RUNTIME', 'RUNNING']
+    ws.append(headers)
+
+    # iterate through each element and write the data to the worksheet
+    for version in root.find('Versions'):
+        version_row = [version.attrib.get('Name'), version.attrib.get('Version'), None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None]
+        ws.append(version_row)
+    i = 0
+    for schedule in root.findall('SCHEDULE'):
+        schedule_name = schedule.attrib.get('NAME')
+        schedule_comment = schedule.attrib.get('COMMENT')
+        schedule_service = schedule.attrib.get('SERVICE')
+        # Create list of stop rows and run rows
+        stop_rows = []
+        run_rows = []
+        for trip in schedule.find('TRIPS'):
+            for stop in trip.findall('STOP'):
+                stop_row = [None, None, None, schedule_name, schedule_comment, schedule_service, trip.attrib.get('NUMBER'), trip.attrib.get('TRIP_ID'), trip.attrib.get('SERVICE_ID'), trip.attrib.get('DIRECTION'), trip.attrib.get('ENTRY_TIME'), trip.attrib.get('DISTANCE'), trip.attrib.get('TRAIN_CLASS'), trip.attrib.get('MISSION_TYPE'), trip.attrib.get('RUNNING_MODE'), trip.attrib.get('CREW_ID'), trip.attrib.get('NEXT_CREW_ID'), trip.attrib.get('NEXT_CREW_ID_LOCATION'), trip.attrib.get('ROLLINGSTOCK_ID'), trip.attrib.get('PREVIOUS_NUMBER'), trip.attrib.get('NEXT_NUMBER'), stop.attrib.get('TOP'), stop.attrib.get('DWELLTIME'), stop.attrib.get('SITUATION'), None, None, None]
+                stop_rows.append(stop_row)
+            for run in trip.findall('RUN'):
+                run_row = [None, None, None, schedule_name, schedule_comment, schedule_service, trip.attrib.get('NUMBER'), trip.attrib.get('TRIP_ID'), trip.attrib.get('SERVICE_ID'), trip.attrib.get('DIRECTION'), trip.attrib.get('ENTRY_TIME'), trip.attrib.get('DISTANCE'), trip.attrib.get('TRAIN_CLASS'), trip.attrib.get('MISSION_TYPE'), trip.attrib.get('RUNNING_MODE'), trip.attrib.get('CREW_ID'), trip.attrib.get('NEXT_CREW_ID'), trip.attrib.get('NEXT_CREW_ID_LOCATION'), trip.attrib.get('ROLLINGSTOCK_ID'), trip.attrib.get('PREVIOUS_NUMBER'), trip.attrib.get('NEXT_NUMBER'), None, None, None, run.attrib.get('TOP'), run.attrib.get('RUNTIME'), run.attrib.get('RUNNING')]
+                run_rows.append(run_row)
+            run_rows.append([None, None, None, schedule_name, schedule_comment, schedule_service, trip.attrib.get('NUMBER'), trip.attrib.get('TRIP_ID'), trip.attrib.get('SERVICE_ID'), trip.attrib.get('DIRECTION'), trip.attrib.get('ENTRY_TIME'), trip.attrib.get('DISTANCE'), trip.attrib.get('TRAIN_CLASS'), trip.attrib.get('MISSION_TYPE'), trip.attrib.get('RUNNING_MODE'), trip.attrib.get('CREW_ID'), trip.attrib.get('NEXT_CREW_ID'), trip.attrib.get('NEXT_CREW_ID_LOCATION'), trip.attrib.get('ROLLINGSTOCK_ID'), trip.attrib.get('PREVIOUS_NUMBER'), trip.attrib.get('NEXT_NUMBER'), None, None, None, None, None, None])
+        i+=1
+        # Write alternating rows to worksheet
+        for stop_row, run_row in zip(stop_rows, run_rows):
+            ws.append(stop_row)
+            ws.append(run_row)
+
+    # save the Excel file
+    wb.save(Excel_path)
+    return 1
+
+def ExcelToXml(path):
+    # load the Excel file
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+    
+    df = pd.read_excel(path)
+    
+    print('Entered')
+    def get_service(df):
+        l = set(df['SERVICE_ID'].apply(lambda x: '' if np.isnan(x) else int(x)))
+        l.discard('')
+        print(l)
+        l = [str(x) for x in l]
+        print(l)
+    get_service(df)
+
+    def CelltoStr(ws,a,b):
+        if(ws.cell(row=a,column=b).value) != None:
+            return str(ws.cell(row=a,column=b).value)
+        return ''
+    xml_path = '/'.join(path.split('/')[:-1])+'/TimeTable.xml'
+    f = open(xml_path,'w+')
+
+    f.writelines('''<?xml version="1.0" encoding="UTF-8" ?>
+    <ROOT>
+       <Versions>
+          <ID Name="OGT-G" Version="OGT-G-05.64"></ID>
+          <ID Name="OGT-ATS-INTERFACE" Version="3.0"></ID>
+          <ID Name="ODPT_APPLICATION_AREA" Version="BLR_1190"></ID></Versions>
+       <TITLE>Schedule file</TITLE>
+       <SCHEDULE NAME="L1_26_02_24_WHTMUP_GDCPLOOP_WKDAY_TT" COMMENT="" SERVICE="">
+          <TRIPS>\n''')
+    i = 5
+    print(CelltoStr(ws,i,4))
+    def situationFinder(ws,i,s):
+        if(str(ws.cell(row=i,column=24).value)!='FINAL_DEADRUN'):
+            return str(ws.cell(row=i-2,column=24).value)
+        return s
+
+    while ws.cell(row=i,column=4).value != None:
+        if i == 5:
+            f.writelines(f'         <TRIP NUMBER="{CelltoStr(ws,i,7)}" TRIP_ID="{CelltoStr(ws,i,8)}" SERVICE_ID="{CelltoStr(ws,i,9)}" DIRECTION="{CelltoStr(ws,i,10)}" ENTRY_TIME="{CelltoStr(ws,i,11)}" DISTANCE="{CelltoStr(ws,i,12)}" TRAIN_CLASS="{CelltoStr(ws,i,13)}" MISSION_TYPE="{CelltoStr(ws,i,14)}" RUNNING_MODE="{CelltoStr(ws,i,15)}" CREW_ID="{CelltoStr(ws,i,16)}" NEXT_CREW_ID="{CelltoStr(ws,i,17)}" NEXT_CREW_ID_LOCATION="{CelltoStr(ws,i,18)}" ROLLINGSTOCK_ID="{CelltoStr(ws,i,19)}" PREVIOUS_NUMBER="{CelltoStr(ws,i,20)}" NEXT_NUMBER="{CelltoStr(ws,i,21)}">\n')
+        elif CelltoStr(ws,i,7) != CelltoStr(ws,i-1,7):
+            f.writelines('         </TRIP>\n')
+            f.writelines(f'         <TRIP NUMBER="{CelltoStr(ws,i,7)}" TRIP_ID="{CelltoStr(ws,i,8)}" SERVICE_ID="{CelltoStr(ws,i,9)}" DIRECTION="{CelltoStr(ws,i,10)}" ENTRY_TIME="{CelltoStr(ws,i,11)}" DISTANCE="{CelltoStr(ws,i,12)}" TRAIN_CLASS="{CelltoStr(ws,i,13)}" MISSION_TYPE="{CelltoStr(ws,i,14)}" RUNNING_MODE="{CelltoStr(ws,i,15)}" CREW_ID="{CelltoStr(ws,i,16)}" NEXT_CREW_ID="{CelltoStr(ws,i,17)}" NEXT_CREW_ID_LOCATION="{CelltoStr(ws,i,18)}" ROLLINGSTOCK_ID="{CelltoStr(ws,i,19)}" PREVIOUS_NUMBER="{CelltoStr(ws,i,20)}" NEXT_NUMBER="{CelltoStr(ws,i,21)}">\n')
+        if CelltoStr(ws,i,22) != '':
+            f.writelines(f'            <STOP TOP="{CelltoStr(ws,i,22)}" DWELLTIME="{CelltoStr(ws,i,23)}" SITUATION="{CelltoStr(ws,i,24)}"/>\n')
+        if CelltoStr(ws,i,25) != '':
+            f.writelines(f'            <RUN TOP="{CelltoStr(ws,i,25)}" RUNTIME="{CelltoStr(ws,i,26)}" SITUATION="{situationFinder(ws,i+1,CelltoStr(ws,i+1,24))}" RUNNING="{CelltoStr(ws,i,27)}"/>\n')
+
+        i+=1
+
+    f.writelines('''         </TRIP>
+          </TRIPS>
+       </SCHEDULE>
+    </ROOT>''')
+    return 1
+
+#def EntryTimeUpdate(ser,trip,time):
+    
